@@ -36,7 +36,9 @@ public class LogFilterManager {
         // 如果有新的过滤规则，则添加到 CompositeFilter
         if (!newMessagesToHide.isEmpty()) {
             CompositeFilter compositeFilter = CompositeFilter.createFilters(new Filter[]{newFilter});
-            loggerConfig.addFilter(compositeFilter); // 添加新的过滤器
+            if (loggerConfig != null) {
+                loggerConfig.addFilter(compositeFilter); // 添加新的过滤器
+            }
         }
 
         // 应用更新后的配置

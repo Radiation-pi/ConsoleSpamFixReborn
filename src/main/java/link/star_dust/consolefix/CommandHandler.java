@@ -14,22 +14,28 @@ public class CommandHandler implements CommandExecutor {
 
     @Override
     public boolean onCommand(CommandSender sender, Command command, String cmdlabel, String[] args) {
-        if (cmdlabel.equalsIgnoreCase("csf")) {
-            if (args.length == 1) {
-                if (args[0].equalsIgnoreCase("reload")) {
-                    if (sender instanceof Player) {
-                        if (!sender.hasPermission("csf.admin")) {
-                            sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.NoPermission"));
-                            return true;
-                        }
-                        sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.CmdReload"));
-                    }
-                    this.csf.getConfigHandler().loadConfig();
-                }
-            } else {
-                sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.CmdHelp"));
-            }
+        if (!cmdlabel.equalsIgnoreCase("csf")) {
+            return true;
         }
+
+        if (args.length != 1) {
+            sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.CmdHelp"));
+            return true;
+        }
+
+        if (!args[0].equalsIgnoreCase("reload")) {
+            sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.CmdHelp"));
+            return true;
+        }
+
+        if (sender instanceof Player && !sender.hasPermission("csf.admin")) {
+            sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.NoPermission"));
+            return true;
+        }
+
+        sender.sendMessage(this.csf.getConfigHandler().getStringWithColor("ChatMessages.CmdReload"));
+        this.csf.getConfigHandler().loadConfig();
+
         return true;
     }
 }

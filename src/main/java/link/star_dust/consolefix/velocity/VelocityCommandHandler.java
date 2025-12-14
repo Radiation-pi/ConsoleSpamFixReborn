@@ -32,27 +32,30 @@ public class VelocityCommandHandler implements SimpleCommand {
             return;
         }
 
-        // 处理参数
-        if (args.length == 1 && args[0].equalsIgnoreCase("reload")) {
-            // 重新加载配置
-            boolean success = configHandler.loadConfig();
-            if (success) {
-                if (logFilter != null) { // 添加空值检查
-                    try {
-                        logFilterManager.updateFilter(velocityCSF.getConfigHandler().getStringList("Messages-To-Hide-Filter"));
-                    } catch (SerializationException e) {
-                        e.printStackTrace();
-                    }
-                    source.sendMessage(Component.text("Reload successful!"));
-                } else {
-                    source.sendMessage(Component.text("LogFilter is not initialized. Reload failed."));
-                }
-            } else {
-                source.sendMessage(Component.text("Failed to reload the config. Check the console for errors."));
-            }
-        } else {
+        // 检查参数
+        if (args.length != 1 || !args[0].equalsIgnoreCase("reload")) {
             source.sendMessage(Component.text("Reload Config: /csfv reload"));
+            return;
         }
+
+        boolean success = configHandler.loadConfig();
+        if (!success) {
+            source.sendMessage(Component.text("Failed to reload the config. Check the console for errors."));
+            return;
+        }
+
+        // 检查空值
+        if (logFilter == null) {
+            source.sendMessage(Component.text("LogFilter is not initialized. Reload failed."));
+            return;
+        }
+
+        try {
+            logFilterManager.updateFilter(velocityCSF.getConfigHandler().getStringList("Messages-To-Hide-Filter"));
+        } catch (SerializationException e) {
+            e.printStackTrace();
+        }
+        source.sendMessage(Component.text("Reload successful!"));
     }
 
     @Override

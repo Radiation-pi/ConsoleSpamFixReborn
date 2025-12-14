@@ -9,6 +9,7 @@ import org.spongepowered.configurate.serialize.SerializationException;
 import org.spongepowered.configurate.yaml.YamlConfigurationLoader;
 
 import java.io.*;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import org.slf4j.Logger;
@@ -61,7 +62,7 @@ public class ConfigHandler {
                 return;
             }
 
-            try (OutputStream outputStream = new FileOutputStream(configFile)) {
+            try (OutputStream outputStream = Files.newOutputStream(configFile.toPath())) {
                 byte[] buffer = new byte[1024];
                 int length;
                 while ((length = inputStream.read(buffer)) > 0) {

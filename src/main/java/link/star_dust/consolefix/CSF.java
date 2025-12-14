@@ -13,9 +13,7 @@ import java.util.logging.Logger;
 public final class CSF extends JavaPlugin {
     public static Logger log;
     public static String pluginName;
-    public boolean is19Server = true;
-    public boolean is13Server = false;
-    public boolean oldEngine = false;
+    private ServerVersion serverVersion;
     private static ConfigHandler cH;
     private static EngineInterface eng;
 
@@ -28,9 +26,9 @@ public final class CSF extends JavaPlugin {
         log = this.getLogger();
         log.info("Initializing " + pluginName);
 
-        this.getMcVersion();
+        this.detectServerVersion();
         cH = new ConfigHandler(this);
-        eng = this.oldEngine ? new OldEngine(this) : new NewEngine(this);
+        eng = serverVersion.usesOldEngine() ? new OldEngine(this) : new NewEngine(this);
         CommandHandler cmd = new CommandHandler(this);
         
         int pluginId = 24348;
@@ -61,23 +59,13 @@ public final class CSF extends JavaPlugin {
         log.info(pluginName + " is disabled!");
     }
 
-    private void getMcVersion() {
-        String[] serverVersion = Bukkit.getBukkitVersion().split("-");
-        String version = serverVersion[0];
+    private void detectServerVersion() {
+        String[] versionParts = Bukkit.getBukkitVersion().split("-");
+        String version = versionParts[0];
         log.info("Server version detected: " + version);
-        if (version.matches("1.7.10") || version.matches("1.7.9") || version.matches("1.7.5") || version.matches("1.7.2") || version.matches("1.8.8") || version.matches("1.8.3") || version.matches("1.8.4") || version.matches("1.8")) {
-            this.is19Server = false;
-            this.is13Server = false;
-            this.oldEngine = true;
-        } else if (version.matches("1.9") || version.matches("1.9.1") || version.matches("1.9.2") || version.matches("1.9.3") || version.matches("1.9.4") || version.matches("1.10") || version.matches("1.10.1") || version.matches("1.10.2") || version.matches("1.11") || version.matches("1.11.1") || version.matches("1.11.2")) {
-            this.oldEngine = true;
-            this.is19Server = true;
-            this.is13Server = false;
-        } else {
-        	this.is13Server = true;
-            this.is19Server = true;
-            this.oldEngine = false;
-        }
+
+        this.serverVersion = ServerVersion.fromVersionString(version);
+        log.info("Using engine type: " + serverVersion.getEngineType() + " for server version " + serverVersion);
     }
 
     public ConfigHandler getConfigHandler() {
