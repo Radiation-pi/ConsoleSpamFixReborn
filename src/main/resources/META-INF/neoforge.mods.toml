@@ -1,9 +1,0 @@
-modLoader = "javafml"
-loaderVersion = "[2,)"
-
-[[mods]]
-modId = "consolespamfixreborn"
-version = "${version}"
-displayName = "ConsoleSpamFixReborn"
-description = "Stop the console spam errors."
-authors = "Author87668"

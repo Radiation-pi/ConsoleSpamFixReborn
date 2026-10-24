@@ -1,126 +1,69 @@
-plugins {
-    id 'java'
-    id 'eclipse'
-    id 'com.github.johnrengelman.shadow' version '8.1.1'
-}
+import groovy.json.JsonOutput
 
-group 'link.star_dust'
-version '2.1.0'
+plugins { id 'java' }
 
-sourceCompatibility = 17
-targetCompatibility = 17
-
+group = 'link.star_dust'
+version = '2.1.0-paper.1'
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 repositories {
     mavenCentral()
-    maven {
-        name = 'SpigotMC'
-        url = 'https://hub.spigotmc.org/nexus/content/repositories/snapshots/'
-    }
-    maven {
-        name = 'Apache'
-        url = 'https://maven.aliyun.com/repository/apache-snapshots'
-    }
-    maven {
-	    name = 'Velocity'
-	    url = 'https://repo.papermc.io/repository/maven-public/'
-	}
-	maven {
-        name = 'bStats'
-        url = 'https://repo.codemc.org/repository/maven-public/'
-    }
-	maven {
-        name = 'sonatype'
-        url = 'https://oss.sonatype.org/content/repositories/snapshots/'
-    }
-	maven {
-	    name = 'md-5'
-	    url = 'https://repo.md-5.net/content/repositories/snapshots/'
-	}
-	maven {
-        name = 'Fabric'
-        url = 'https://maven.fabricmc.net/'
-    }
-	maven {
-        name = 'faststats'
-        url = 'https://repo.faststats.dev/releases'
-    }
+    maven { url = 'https://repo.papermc.io/repository/maven-public/' }
 }
-
-// The Forge/NeoForge @Mod annotations are compile-time stubs under
-// src/main/stub (see stub/net/...). They are compiled but never shipped.
-sourceSets {
-    main {
-        java {
-            srcDirs = ['src/main/java', 'src/main/stub']
-        }
-    }
-}
-
 dependencies {
-    compileOnly 'org.spigotmc:spigot-api:1.21.4-R0.1-SNAPSHOT'
-    compileOnly 'com.velocitypowered:velocity-api:3.0.0-SNAPSHOT'
-	compileOnly 'net.md-5:bungeecord-api:1.21-R0.1-SNAPSHOT'
-    compileOnly 'org.apache.logging.log4j:log4j-core:2.24.3'
-    compileOnly 'org.apache.logging.log4j:log4j-api:2.24.3'
-    // Mod platforms: brigadier (standalone lib, not a Minecraft class) for
-    // native command registration; fabric-loader-api for name resolution +
-    // the ModInitializer entrypoint. Both are provided at runtime by the
-    // server / loader and are NOT bundled.
-    compileOnly 'com.mojang:brigadier:1.0.18'
-    compileOnly 'net.fabricmc:fabric-loader:0.14.22'
-    implementation 'org.spongepowered:configurate-yaml:4.1.2'
-    implementation 'org.bstats:bstats-bukkit:3.0.0'
-    implementation 'org.bstats:bstats-velocity:3.0.0'
-    implementation 'org.bstats:bstats-bungeecord:3.0.0'
-    // Mod-platform telemetry (faststats.dev). Bundled + relocated below.
-    // Gson is pinned + relocated so we don't depend on the server's copy.
-    implementation 'dev.faststats.metrics:core:0.29.4'
-    implementation 'dev.faststats.metrics:config:0.29.4'
-    implementation 'com.google.code.gson:gson:2.14.0'
-    //implementation 'net.kyori:adventure-api:4.14.0'
-    //implementation 'net.kyori:adventure-text-minimessage:4.14.0'
+    if (providers.gradleProperty('serverLibraries').isPresent()) {
+        compileOnly fileTree(providers.gradleProperty('serverLibraries').get()) { include '**/*.jar' }
+    } else {
+        compileOnly 'io.papermc.paper:paper-api:26.2.build.134-stable'
+        compileOnly 'org.apache.logging.log4j:log4j-core:2.26.0'
+        compileOnly 'org.spongepowered:configurate-yaml:4.2.0'
+    }
+    testImplementation files(configurations.compileClasspath)
 }
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
-tasks.withType(JavaCompile).configureEach {
-    options.encoding = 'UTF-8'
-    options.release = 17
-}
-
-processResources {
-    // Expand ${version} in the platform metadata files so the version is
-    // kept in sync with the build version automatically.
-    filesMatching(['**/plugin.yml', '**/fabric.mod.json', '**/mods.toml', '**/neoforge.mods.toml']) {
-        expand(version: project.version.toString())
+def orderFile = layout.projectDirectory.file(providers.gradleProperty('loadOrderFile').getOrElse('load-order.properties'))
+def pluginVersion = project.version.toString()
+tasks.named('processResources') {
+    inputs.file(orderFile)
+    inputs.property('version', project.version)
+    doLast {
+        Properties order = new Properties()
+        orderFile.asFile.withInputStream { order.load(it) }
+        def dependencies = [:]
+        ['bootstrap', 'server'].each { phase ->
+            def entries = [:]
+            ['before', 'after'].each { direction ->
+                order.getProperty("${phase}.${direction}", '').split(',').collect { it.trim() }.findAll { it }.each { target ->
+                    if (!(target ==~ /[A-Za-z0-9_.-]+/) || target == 'ConsoleSpamFixReborn' || entries.containsKey(target)) {
+                        throw new GradleException("Invalid or conflicting ${phase} load target: ${target}")
+                    }
+                    entries[target] = [load: direction == 'before' ? 'AFTER' : 'BEFORE', required: false, 'join-classpath': false]
+                }
+            }
+            dependencies[phase] = entries
+        }
+        def descriptor = [name: 'ConsoleSpamFixReborn', version: pluginVersion,
+            main: 'link.star_dust.consolefix.paper.ConsoleFixPlugin',
+            bootstrapper: 'link.star_dust.consolefix.paper.ConsoleFixBootstrap',
+            loader: 'link.star_dust.consolefix.paper.ConsoleFixLoader',
+            'api-version': '26.2', load: 'STARTUP',
+            authors: ['CraftersLand', 'Author87668', 'Radiation-pi'],
+            description: 'Paper console filtering with early bootstrap installation.', dependencies: dependencies,
+            permissions: ['csf.admin': [description: 'Manage console filters', default: 'op']]]
+        // JSON is valid YAML; no build-time YAML dependency is needed.
+        new File(destinationDir, 'paper-plugin.yml').text = JsonOutput.prettyPrint(JsonOutput.toJson(descriptor)) + '\n'
     }
 }
-
-// The plain jar is disabled — distribution is done by the shadowJar task.
-// Keeping it would produce a misleading jar and duplicate-entry errors
-// (the jar task both copies resources and inlines the compile classpath).
-jar {
-    enabled = false
+tasks.register('behaviorTest', JavaExec) {
+    dependsOn testClasses
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'link.star_dust.consolefix.paper.BehaviorTest'
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
 }
-
-shadowJar {
-    relocate 'org.bstats', 'link.star_dust.bstats'
-    // Relocate bundled third-party libs so modded servers (Forge/NeoForge
-    // JPMS module layers) never hit split-package errors.
-    relocate 'org.spongepowered', 'link.star_dust.spongepowered'
-    relocate 'org.yaml', 'link.star_dust.yaml'
-    // FastStats SDK + Gson (+ transitive error_prone annotations) — relocate
-    // every bundled package so a server running another mod that provides the
-    // same package doesn't hit a JPMS split-package error.
-    relocate 'dev.faststats', 'link.star_dust.faststats'
-    relocate 'com.google.gson', 'link.star_dust.gson'
-    relocate 'com.google.errorprone', 'link.star_dust.errorprone'
-    // Compile-time stub annotations (@Mod) are never shipped; the server
-    // provides the real net.minecraftforge.* / net.neoforged.* classes.
-    exclude 'net/minecraftforge/**'
-    exclude 'net/neoforged/**'
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-    archiveClassifier.set('')
-}
-
-build {
-    dependsOn shadowJar
+tasks.named('check') { dependsOn 'behaviorTest' }
+tasks.named('test') { enabled = false } // Behavior tests use real Log4j without a test framework.
+tasks.named('jar') {
+    archiveBaseName = 'ConsoleSpamFixReborn'
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
 }

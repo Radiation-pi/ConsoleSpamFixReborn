@@ -1,6 +1,6 @@
 ---
-name: BUG Report (bukkit)
-about: If you want to report a bug, select this. (bukkit)
+name: Paper bug report
+about: Report a problem with the Paper fork.
 title: "[Minecraft Version] [Issue Title]"
 labels: "❌BUG"
 assignees: ''
@@ -9,7 +9,9 @@ assignees: ''
 
 ### [Minecraft Version] [Issue Title]
 
-- [ ] Folia
+- Paper / Leaf version:
+- Java version:
+- `/csf status` output:
 
 #### Description
 
@@ -29,7 +31,7 @@ assignees: ''
 [Minecraft's version.]
 
 #### Server Software
-[Server software name like Spigot or Paper.]
+[Paper or compatible fork name and build.]
 
 #### How to reproduce
 1. Step 1
