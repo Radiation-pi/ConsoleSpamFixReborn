@@ -130,6 +130,41 @@ public final class BehaviorTest {
         }
     }
 
+    private static void regexListRules() throws Exception {
+        Path path = config(rules("- 'java\\.net\\.ConnectException: 连接超时'\n- '.*Read timed out.*'\n- yyy\n"));
+        Rig rig = rig();
+        try (FilterRuntime runtime = new FilterRuntime(path, m -> { throw new AssertionError(m); })) {
+            runtime.reach(Settings.Stage.BOOTSTRAP);
+            check(runtime.test(event("x", "java.net.ConnectException: 连接超时", null)).equals("DROP (regex-1)"),
+                "plain rule strings compile as substring regex and get generated ids");
+            check(runtime.test(event("x", "prefix Read timed out suffix", null)).equals("DROP (regex-2)"),
+                "any matching regex list entry drops the event");
+            check(runtime.test(event("x", "prefix yyy suffix", null)).equals("DROP (regex-3)"),
+                "plain unquoted YAML list scalars are accepted");
+            check(runtime.test(event("x", "javaXnetXConnectException: 连接超时", null)).startsWith("PASS"),
+                "escaped punctuation retains literal matching");
+            LogManager.getLogger("normal").error("prefix yyy suffix");
+            LogManager.getLogger("normal").error("still visible");
+            check(runtime.hidden() == 1 && rig.capture.messages.equals(List.of("still visible")),
+                "regex list filters real events and keeps unrelated logs visible");
+            for (String invalid : List.of("- '['\n", "- ''\n", "- 123\n", "- yyy\n- id: advanced\n  message-equals: test\n")) {
+                Files.writeString(path.resolve("config.yml"), rules(invalid));
+                try { runtime.reload(); throw new AssertionError("invalid shorthand rule accepted"); }
+                catch (IOException expected) {
+                    check(runtime.test(event("x", "prefix yyy suffix", null)).equals("DROP (regex-3)"),
+                        "invalid shorthand reload preserves previous rules");
+                }
+            }
+            Files.writeString(path.resolve("config.yml"), rules("- '^new$'\n"));
+            runtime.reload();
+            check(runtime.test(event("x", "new", null)).startsWith("DROP")
+                && runtime.test(event("x", "prefix new suffix", null)).startsWith("PASS")
+                && runtime.test(event("x", "yyy", null)).startsWith("PASS"),
+                "regex reload replaces old rules and honors anchors");
+        }
+        rig.context.stop();
+    }
+
     private static void concurrencyAndStages() throws Exception {
         Rig rig = rig();
         Path path = config(rules("  - id: concurrent\n    message-equals: hidden\n"));
@@ -180,7 +215,7 @@ public final class BehaviorTest {
         check(writer.discarded() == before + 1, "unavailable archive counts dropped entries");
     }
     public static void main(String[] args) throws Exception {
-        migration(); matchAndReload(); concurrencyAndStages(); archive();
+        migration(); matchAndReload(); regexListRules(); concurrencyAndStages(); archive();
         System.out.println("Completed " + checks + " checks");
     }
 }

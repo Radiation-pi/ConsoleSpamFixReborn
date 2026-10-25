@@ -77,7 +77,27 @@ final class ConfigFile {
             List<Rule> rules = new ArrayList<>();
             Set<String> ids = new HashSet<>();
             if (!root.node("rules").isList()) throw new IllegalArgumentException("rules must be a list");
+            int shorthandIndex = 0;
+            Boolean shorthandMode = null;
             for (ConfigurationNode r : root.node("rules").childrenList()) {
+                if (r.raw() instanceof String expression) {
+                    if (Boolean.FALSE.equals(shorthandMode))
+                        throw new IllegalArgumentException("rules cannot mix regex strings and advanced rule mappings");
+                    shorthandMode = true;
+                    int ruleIndex = ++shorthandIndex;
+                    if (expression.isBlank()) throw new IllegalArgumentException("Blank regex in rule " + ruleIndex);
+                    try {
+                        Pattern pattern = Pattern.compile(expression);
+                        rules.add(new Rule("regex-" + ruleIndex, Set.of(), Set.of(), Set.of(),
+                            null, List.of(), List.of(pattern), List.of(), Rule.Action.DROP));
+                    } catch (java.util.regex.PatternSyntaxException e) {
+                        throw new IllegalArgumentException("Invalid regex in rule " + ruleIndex + ": " + e.getDescription(), e);
+                    }
+                    continue;
+                }
+                if (Boolean.TRUE.equals(shorthandMode))
+                    throw new IllegalArgumentException("rules cannot mix regex strings and advanced rule mappings");
+                shorthandMode = false;
                 rejectKeys(r, Set.of("id", "enabled", "phases", "logger-names", "levels", "message-equals",
                     "message-contains-any", "message-regex-any", "throwable-any", "action"));
                 String id = r.node("id").getString("");

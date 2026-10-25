@@ -2,13 +2,14 @@
 
 Paper 专用分支，基于 [At87668/ConsoleSpamFixReborn 2.1.0](https://github.com/At87668/ConsoleSpamFixReborn/tree/2.1.0)。保留上游 Git 历史及作者来源。原项目基于 [CraftersLand 的 Console Spam Fix](https://www.spigotmc.org/resources/console-spam-fix.18410/)。
 
-目标为 **Paper 26.2 / Java 25**，已在 Leaf 26.2 build 124 的独立实例验证。当前版本 `2.1.0-paper.1`。不提供 Bukkit/Spigot、Folia、代理或 Mod 加载器版本。
+目标为 **Paper 26.2 / Java 25**，已在 Leaf 26.2 build 124 的独立实例验证。当前版本 `2.1.1`。不提供 Bukkit/Spigot、Folia、代理或 Mod 加载器版本。
 
 ## 行为
 
 - 通过 `paper-plugin.yml` 和 `PluginBootstrap.bootstrap` 尽早安装过滤器，覆盖后续 bootstrap、认证初始化、插件加载和运行日志。
 - 通过 Paper `PluginLoader` / `MavenLibraryResolver` 导入固定版本 Configurate 4.2.0，使用 Paper 默认 Maven Central 镜像。Log4j 使用服务器提供的版本，不打包或单独加载。
-- 按顺序匹配 logger 名、级别、消息、异常因果链及 STARTUP/RUNNING 阶段；第一条匹配规则决定 DROP 或 KEEP。KEEP 不会覆盖其他 Log4j 过滤器的决定。
+- 简写规则列表接受 Java 正则字符串；任意一条正则命中格式化消息就执行 DROP，自动生成内部规则编号，不用逐条写 ID 或 action。正则默认在消息任意位置查找，可用 `^`/`$` 锚定。
+- 高级规则仍可使用 logger 名、级别、消息、异常因果链及 STARTUP/RUNNING 阶段组合匹配；高级规则中的首条匹配规则决定 DROP 或 KEEP。KEEP 不会覆盖其他 Log4j 过滤器的决定。
 - 1.x 列表、2.x contains/regex 配置会保留原文件备份后迁移，保留旧规则和自定义字段；无效配置不会覆盖源文件。
 - `/csf reload` 验证全部规则后一次替换；格式、未知字段、正则或空关键词错误会保留之前的完整规则集。
 - 计数使用 LongAdder；过滤器在 Log4j 配置替换后重新挂载，插件禁用时移除自身过滤器和监听器，关闭自己的归档线程。
@@ -29,30 +30,15 @@ schema-version: 1
 installation:
   stage: BOOTSTRAP
 rules:
-  - id: keep-maintenance
-    message-contains-any: ['maintenance-required']
-    action: KEEP
-  - id: authlib-public-key-timeout
-    enabled: true
-    logger-names: [com.mojang.authlib.yggdrasil.YggdrasilServicesKeyInfo]
-    levels: [ERROR]
-    message-equals: 'Failed to request yggdrasil public key'
-    throwable-any:
-      - class: java.net.SocketTimeoutException
-        message-contains-any: ['Connect timed out', 'Read timed out']
-    action: DROP
-  - id: startup-only-example
-    enabled: false
-    phases: [STARTUP]
-    message-regex-any: ['^exact startup message$']
+- xxx
+- yyy
 archive:
   enabled: false
-  queue-capacity: 2048
-  max-file-mb: 16
-  max-files: 4
 ```
 
-所有不同字段之间为 AND，单个 `*-any` 列表内为 OR。logger 名和异常类名精确匹配；异常遍历因果链，最多 64 层并防循环。省略 phases 时适用两个阶段。ServerLoadEvent 后进入 RUNNING。规则列表为空代表不过滤。
+列表项是 Java 正则，任意一项匹配就 DROP；匹配使用 `find()`，所以未加 `^`/`$` 的表达式可命中消息中的一段。要按普通文本匹配时，请转义正则元字符，例如句点写成 `\.`。包含冒号等 YAML 标点的表达式可用引号包住，例如 `- 'java\.net\.ConnectException: timeout'`。也可写 `rules: []` 表示不过滤。
+
+旧的高级映射规则仍兼容；同一个 `rules` 列表不混用正则字符串和映射。高级规则的不同字段之间为 AND，单个 `*-any` 列表内为 OR。logger 名和异常类名精确匹配；异常遍历因果链，最多 64 层并防循环。省略 phases 时适用两个阶段。ServerLoadEvent 后进入 RUNNING。
 
 所有 DROP 同时作用于根日志路径上的控制台和文件。归档位于插件目录 `filtered-logs/filtered.log`，达到阈值后轮换为 `.1` 等；单个超大事件可能超过文件阈值。归档不做网络输出。配置中的归档参数和安装阶段修改需重启；运行规则可热重载。内部管理诊断 logger 保持可见。
 
@@ -88,7 +74,7 @@ server.after=
 ./gradlew clean build
 ```
 
-需要 JDK 25；Gradle wrapper 9.6.1 带 SHA-256 校验。输出 `build/libs/ConsoleSpamFixReborn-2.1.0-paper.1.jar`。`check` 包含基于真实 Log4j 的行为测试，不依赖 MockBukkit 或 JUnit。GitHub Actions 自动构建并保留 JAR artifact。
+需要 JDK 25；Gradle wrapper 9.6.1 带 SHA-256 校验。输出 `build/libs/ConsoleSpamFixReborn-2.1.1.jar`。`check` 包含基于真实 Log4j 的行为测试，不依赖 MockBukkit 或 JUnit。GitHub Actions 自动构建并保留 JAR artifact。
 
 无网络环境可使用已安装服务器的库编译：
 

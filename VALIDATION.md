@@ -1,4 +1,14 @@
-# 2.1.0-paper.1 验证记录
+# 2.1.1 验证记录
+
+验证日期：2026-10-25。基于 `1b7a8ac`，使用 Java 25 和本机缓存的 Gradle 9.7.1 离线完成 `clean build`，42 项行为检查通过。
+
+新增检查覆盖无缩进的 YAML 正则列表、自动内部编号、任意项命中即 DROP、真实日志过滤、正则转义与锚定、无效正则/空白/非字符串/混合列表重载保留旧规则，以及成功重载替换旧规则。测试显式使用无文件 appender 的 Log4j 配置。
+
+已部署到 Leaf 26.2 build 124 测试服：BOOTSTRAP 阶段成功加载原有 7 条规则；7 条原过滤文本逐条 dry-run 均返回 DROP，普通消息返回 PASS，`csf reload` 成功，实际计数已有命中。原配置原样保留，Skript 脚本加载无错误。
+
+成品 `ConsoleSpamFixReborn-2.1.1.jar`，35,805 字节，SHA-256：`32df671581c21635abbff16edd171559b440b1b77bf9aa18d5528c69b3e53cdb`。部署与命令证据：`/server/codex/tasks/consolefix-regex-list-fix-20261025/verification.json` 和 `command-output.log`。
+
+# 2.1.0-paper.1 历史验证记录
 
 验证日期：2026-10-24。基线：上游 2.1.0，提交 `1123b718e2146383164d9a3e6d993d93f1d1b5bc`。
 

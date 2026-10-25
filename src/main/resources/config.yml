@@ -4,18 +4,10 @@ installation:
   # Changing stage requires a server restart. BOOTSTRAP gives earliest coverage.
   stage: BOOTSTRAP
 
-# First match wins. Fields are ANDed; entries inside each *-any list are ORed.
-# Empty rules filter nothing. Copy the disabled example and enable it as needed.
-rules:
-  - id: authlib-public-key-timeout
-    enabled: false
-    logger-names: [com.mojang.authlib.yggdrasil.YggdrasilServicesKeyInfo]
-    levels: [ERROR]
-    message-equals: 'Failed to request yggdrasil public key'
-    throwable-any:
-      - class: java.net.SocketTimeoutException
-        message-contains-any: ['Connect timed out', 'Read timed out']
-    action: DROP
+# Each item is a Java regular expression. Any matching item drops the event.
+# Regex matching searches anywhere in the formatted message unless anchored with ^ and $.
+# Empty rules filter nothing. Quote regexes containing YAML punctuation or spaces.
+rules: []
 
 # Full filtered events and exceptions, written by one bounded background worker.
 # Queue overflow drops archive entries and increments archiveDropped; never blocks logging.
