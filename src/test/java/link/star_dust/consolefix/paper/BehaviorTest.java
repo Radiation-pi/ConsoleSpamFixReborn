@@ -137,6 +137,9 @@ public final class BehaviorTest {
             runtime.reach(Settings.Stage.BOOTSTRAP);
             check(runtime.test(event("x", "java.net.ConnectException: 连接超时", null)).equals("DROP (regex-1)"),
                 "plain rule strings compile as substring regex and get generated ids");
+            check(runtime.test(event("x", "network failure",
+                new java.net.ConnectException("连接超时"))).equals("DROP (regex-1)"),
+                "regex rules inspect the complete Throwable text");
             check(runtime.test(event("x", "prefix Read timed out suffix", null)).equals("DROP (regex-2)"),
                 "any matching regex list entry drops the event");
             check(runtime.test(event("x", "prefix yyy suffix", null)).equals("DROP (regex-3)"),
@@ -161,6 +164,57 @@ public final class BehaviorTest {
                 && runtime.test(event("x", "prefix new suffix", null)).startsWith("PASS")
                 && runtime.test(event("x", "yyy", null)).startsWith("PASS"),
                 "regex reload replaces old rules and honors anchors");
+        }
+        rig.context.stop();
+    }
+
+    private static void multiLineContinuation() throws Exception {
+        Rig rig = rig();
+        Path path = config(rules("- 'root failure'\n"));
+        try (FilterRuntime runtime = new FilterRuntime(path, m -> { throw new AssertionError(m); })) {
+            runtime.reach(Settings.Stage.BOOTSTRAP);
+            CountDownLatch ready = new CountDownLatch(1);
+            CountDownLatch continueTrace = new CountDownLatch(1);
+            Thread first = new Thread(() -> {
+                LogManager.getLogger("trace").error("root failure");
+                ready.countDown();
+                try { continueTrace.await(); } catch (InterruptedException e) { throw new AssertionError(e); }
+                LogManager.getLogger("trace").warn("java.util.concurrent.CompletionException: root failure");
+                LogManager.getLogger("trace").warn("at example.Root.call(Root.java:12)");
+                LogManager.getLogger("trace").warn("Caused by: java.io.IOException: root failure");
+                LogManager.getLogger("trace").warn("... 2 more");
+                LogManager.getLogger("trace").info("after trace");
+                LogManager.getLogger("trace").warn("at example.Normal.call(Normal.java:8)");
+            }, "trace-a");
+            first.start();
+            check(ready.await(2, java.util.concurrent.TimeUnit.SECONDS), "multiline trace root emitted");
+            Thread other = new Thread(() -> LogManager.getLogger("trace").warn("at other.Thread.call(Other.java:3)"), "trace-b");
+            other.start(); other.join();
+            continueTrace.countDown();
+            first.join();
+            check(rig.capture.messages.contains("at other.Thread.call(Other.java:3)"),
+                "continuation state is isolated by thread");
+            check(!rig.capture.messages.contains("at example.Root.call(Root.java:12)"),
+                "stack frames after a dropped root are hidden");
+            check(!rig.capture.messages.contains("java.util.concurrent.CompletionException: root failure"),
+                "exception headers after a dropped root are hidden");
+            check(!rig.capture.messages.contains("Caused by: java.io.IOException: root failure"),
+                "caused-by lines after a dropped root are hidden");
+            check(!rig.capture.messages.contains("... 2 more"),
+                "omitted stack lines after a dropped root are hidden");
+            check(rig.capture.messages.contains("after trace"),
+                "ordinary messages resume after the trace");
+            check(rig.capture.messages.contains("at example.Normal.call(Normal.java:8)"),
+                "stack-like text after an ordinary message is visible");
+            check(runtime.hidden() == 5, "multiline hidden count includes root and four continuation lines");
+            Thread expired = new Thread(() -> {
+                LogManager.getLogger("trace").error("root failure");
+                try { Thread.sleep(2100); } catch (InterruptedException e) { throw new AssertionError(e); }
+                LogManager.getLogger("trace").warn("at example.Expired.call(Expired.java:4)");
+            }, "trace-expired");
+            expired.start(); expired.join();
+            check(rig.capture.messages.contains("at example.Expired.call(Expired.java:4)"),
+                "continuation state expires after its time window");
         }
         rig.context.stop();
     }
@@ -215,7 +269,7 @@ public final class BehaviorTest {
         check(writer.discarded() == before + 1, "unavailable archive counts dropped entries");
     }
     public static void main(String[] args) throws Exception {
-        migration(); matchAndReload(); regexListRules(); concurrencyAndStages(); archive();
+        migration(); matchAndReload(); regexListRules(); multiLineContinuation(); concurrencyAndStages(); archive();
         System.out.println("Completed " + checks + " checks");
     }
 }

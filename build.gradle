@@ -3,7 +3,7 @@ import groovy.json.JsonOutput
 plugins { id 'java' }
 
 group = 'link.star_dust'
-version = '2.1.1'
+version = '2.1.2-paper'
 java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 repositories {
     mavenCentral()

@@ -88,7 +88,7 @@ server.after=
 
 bootstrap 之前的 Paperclip/Origami、LeafConfig、扫描/重映射和插件 loader 日志不能追回。JVM 自身输出、原始 stdout/stderr、独立 LoggerContext 或不传播到根 logger 的独立 appender 不保证被过滤。需要覆盖第一批日志时，应另行配置启动前生效的 Log4j 配置。
 
-过滤隐藏信息，不修复错误。不要用全局 `Exception`、`at `、`Caused by` 关键词清理堆栈；参数化 Log4j 事件在完整格式化后匹配，带 Throwable 的事件可一起过滤，逐行打印的独立事件仍需单独规则。
+过滤隐藏信息，不修复错误。不要用全局 `Exception`、`at `、`Caused by` 关键词清理堆栈；参数化 Log4j 事件在完整格式化后匹配，带 Throwable 的事件可一起过滤。命中一条 DROP 规则后，插件会按线程在 2 秒窗口内继续隐藏标准 Java 堆栈续行（异常头、`at`、`Caused by`、`Suppressed` 和 `... N more`）；遇到普通消息会立即结束续行状态。
 
 ## 许可来源
 

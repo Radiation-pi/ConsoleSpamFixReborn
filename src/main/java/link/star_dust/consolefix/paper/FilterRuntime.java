@@ -4,14 +4,22 @@ import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.core.*;
 import org.apache.logging.log4j.core.config.*;
 import org.apache.logging.log4j.core.filter.AbstractFilter;
 
 final class FilterRuntime implements AutoCloseable {
+    private static final long STACK_CONTINUATION_WINDOW_NANOS = 2_000_000_000L;
+    private static final Pattern STACK_CONTINUATION = Pattern.compile(
+        "^\\s*(?:(?:[\\w$]+\\.)*[A-Za-z_$][\\w$]*(?:Exception|Error|Throwable|Failure)(?::\\s+.*)?|"
+            + "Caused by:\\s+.+|Suppressed:\\s+.+|at\\s+.+\\([^)]*\\)|\\.\\.\\.\\s+\\d+\\s+more)\\s*$"
+    );
+    private record Continuation(String ruleId, long expiresAt) {}
     private record State(Settings settings, Map<String, LongAdder> counters, ArchiveWriter archive) {}
     private final ConfigFile configFile;
     private final Path directory;
@@ -26,16 +34,41 @@ final class FilterRuntime implements AutoCloseable {
     private Settings.Stage startedStage;
     private LoggerContext context;
     private LoggerConfig attached;
+    private final Map<String, Continuation> continuations = new ConcurrentHashMap<>();
     private final AbstractFilter filter = new AbstractFilter() {
         @Override
         public Result filter(LogEvent event) {
             if (closed) return Result.NEUTRAL;
             FilterRuntime.State current = state;
             Rule match = match(current, event);
-            if (match == null || match.action() == Rule.Action.KEEP) return Result.NEUTRAL;
+            String thread = threadKey(event);
+            if (match != null && match.action() == Rule.Action.KEEP) {
+                continuations.remove(thread);
+                return Result.NEUTRAL;
+            }
+            Continuation continuation = continuations.get(thread);
+            long now = System.nanoTime();
+            if (continuation != null && continuation.expiresAt() <= now) {
+                continuations.remove(thread, continuation);
+                continuation = null;
+            }
+            if (match == null && continuation != null && STACK_CONTINUATION.matcher(message(event)).matches()) {
+                Continuation active = continuation;
+                match = current.settings().rules().stream()
+                    .filter(rule -> rule.id().equals(active.ruleId())).findFirst().orElse(null);
+                if (match == null) {
+                    continuations.remove(thread, continuation);
+                    return Result.NEUTRAL;
+                }
+            }
+            if (match == null || match.action() == Rule.Action.KEEP) {
+                continuations.remove(thread);
+                return Result.NEUTRAL;
+            }
             hidden.increment();
             current.counters().get(match.id()).increment();
             if (current.archive() != null) current.archive().offer(match.id(), event);
+            continuations.put(thread, new Continuation(match.id(), now + STACK_CONTINUATION_WINDOW_NANOS));
             return Result.DENY;
         }
     };
@@ -67,6 +100,7 @@ final class FilterRuntime implements AutoCloseable {
         Map<String, LongAdder> counters = new LinkedHashMap<>();
         for (Rule r : next.rules()) counters.put(r.id(), new LongAdder());
         state = new State(next, Collections.unmodifiableMap(counters), archive);
+        continuations.clear();
         configError = null;
         if (old.archive() != null && old.archive() != archive) old.archive().close();
         return restart ? "Rules reloaded; installation/archive changes require restart." : "Rules reloaded.";
@@ -97,6 +131,12 @@ final class FilterRuntime implements AutoCloseable {
         if ("ConsoleSpamFixReborn".equals(event.getLoggerName())) return null;
         for (Rule rule : current.settings().rules()) if (rule.matches(event, phase)) return rule;
         return null;
+    }
+    private static String threadKey(LogEvent event) {
+        return Objects.toString(event.getThreadName(), "<unknown-thread>");
+    }
+    private static String message(LogEvent event) {
+        return event.getMessage() == null ? "" : event.getMessage().getFormattedMessage();
     }
     String test(LogEvent event) {
         Rule rule = match(state, event);
